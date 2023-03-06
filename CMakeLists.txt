@@ -2,10 +2,10 @@ cmake_minimum_required(VERSION 3.8)
 
 project(ChatSteamingService C CXX)
 
-include(../cmake/common.cmake)
+include(cmake/common.cmake)
 
 # Proto file
-get_filename_component(hw_proto "./protos/chatStreamingService.proto" ABSOLUTE)
+get_filename_component(hw_proto "protos/chatStreamingService.proto" ABSOLUTE)
 get_filename_component(hw_proto_path "${hw_proto}" PATH)
 
 # Generated sources
