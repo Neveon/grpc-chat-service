@@ -6,6 +6,7 @@
 #include <thread>
 
 
+using chatStreamingService::LoginRequest;
 using chatStreamingService::MessageRequest;
 using chatStreamingService::MessageResponse;
 using chatStreamingService::ChatService;
@@ -18,33 +19,58 @@ class ChatServiceClient {
     ChatServiceClient(std::shared_ptr<Channel> channel)
         : stub_(ChatService::NewStub(channel)) {}
 
-    void Chat(const std::string &name) {
-      ClientContext context;
-      std::shared_ptr<grpc::ClientReaderWriter<MessageRequest, MessageResponse>> stream(
-          stub_->Chat(&context));
+    std::string JoinChat(const std::string & name) {
+      // Name we are sending to the server
+      LoginRequest request;
+      request.set_name(name);
 
-      std::thread writer_thread([&stream, name]() {
-        MessageRequest request;
-
-        request.set_name(name);
-        stream->Write(request);
-      });
-
+      // Container for the data we expect from the server
       MessageResponse response;
-      while (stream->Read(&response)) {
-        std::cout << "Got message: '" << response.message() << "'" << std::endl;
-      }
 
-      stream->WritesDone();
-      writer_thread.join();
+      // Context for the client
+      // Extra information for the server and/or tweak certain RPC behaviors
+      ClientContext context;
 
-      Status status = stream->Finish();
-      if (status.ok()) {
-        std::cout << "Chat ended" << std::endl;
+      // The actual RPC
+      Status status = stub_->JoinChat(&context, request, &response);
+
+      // Act upon its status.
+      if (status.ok()){
+        std::cout << response.message() << std::endl;
+        return response.message();
       } else {
-        std::cout << "Chat failed: " << status.error_message() << std::endl;
+        std::cout << status.error_code() << ": " << status.error_message() << std::endl;
+        return "gRPC failed";
       }
-    };
+    }
+
+    // void Chat(const std::string &name) {
+    //   ClientContext context;
+    //   std::shared_ptr<grpc::ClientReaderWriter<MessageRequest, MessageResponse>> stream(
+    //       stub_->Chat(&context));
+
+    //   std::thread writer_thread([&stream, name]() {
+    //     MessageRequest request;
+
+    //     request.set_name(name);
+    //     stream->Write(request);
+    //   });
+
+    //   MessageResponse response;
+    //   while (stream->Read(&response)) {
+    //     std::cout << "Got message: '" << response.message() << "'" << std::endl;
+    //   }
+
+    //   stream->WritesDone();
+    //   writer_thread.join();
+
+    //   Status status = stream->Finish();
+    //   if (status.ok()) {
+    //     std::cout << "Chat ended" << std::endl;
+    //   } else {
+    //     std::cout << "Chat failed: " << status.error_message() << std::endl;
+    //   }
+    // };
 
   private:
     std::unique_ptr<ChatService::Stub> stub_;
@@ -58,9 +84,8 @@ int main(int argc, char** argv) {
   std::cout << "What is your name? ";
   std::string name;
   std::cin >> name;
-  std::cout << "Hello " << name << "!" << std::endl; 
 
-  client.Chat(name);
+  client.JoinChat(name);
 
   return 0;
 }

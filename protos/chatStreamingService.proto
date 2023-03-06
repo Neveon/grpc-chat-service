@@ -4,14 +4,21 @@ package chatStreamingService;
 
 /* 
   The name field is a string type and its tag number is 1.
-  This means that it is the first field in the message, and its
-  value will be serialized with a field number of 1 in the message's
+  This means that it is the first field in the LoginRequest, and its
+  value will be serialized with a field number of 1 in the LoginRequest's
   binary representation
 */
-message MessageRequest {
+message LoginRequest {
   string name = 1;
 }
 
+message LoginResponse {
+  string message = 1;
+}
+
+message MessageRequest {
+  string message = 1;
+}
 /* 
   When the C++ code is generated from this proto file, 
   it will include a MessageResponse class with a 
@@ -24,4 +31,6 @@ message MessageResponse {
 
 service ChatService {
   rpc Chat(stream MessageRequest) returns (stream MessageResponse) {}
+
+  rpc JoinChat(LoginRequest) returns (MessageResponse) {}
 }
