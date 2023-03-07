@@ -10,6 +10,6 @@
 
 4. `make -j 4` (or any number of processors which can be found via `nproc` command on linux)
 
-5. `make install`
+5. `./chat_server`
 
-6. `popd`
+6. `./chat_client`
