@@ -2,13 +2,13 @@
 #include <grpcpp/grpcpp.h>
 #include <iostream>
 #include <memory>
+#include <ostream>
 #include <string>
 #include <thread>
 
 
 using chatStreamingService::LoginRequest;
-using chatStreamingService::MessageRequest;
-using chatStreamingService::MessageResponse;
+using chatStreamingService::ChatMessage;
 using chatStreamingService::ChatService;
 using grpc::Channel;
 using grpc::ClientContext;
@@ -25,7 +25,7 @@ class ChatServiceClient {
       request.set_name(name);
 
       // Container for the data we expect from the server
-      MessageResponse response;
+      ChatMessage response;
 
       // Context for the client
       // Extra information for the server and/or tweak certain RPC behaviors
@@ -44,33 +44,50 @@ class ChatServiceClient {
       }
     }
 
-    // void Chat(const std::string &name) {
-    //   ClientContext context;
-    //   std::shared_ptr<grpc::ClientReaderWriter<MessageRequest, MessageResponse>> stream(
-    //       stub_->Chat(&context));
+    void Chat(const std::string &name) {
+      // Context for the client
+      ClientContext context;
 
-    //   std::thread writer_thread([&stream, name]() {
-    //     MessageRequest request;
+      // Synchronous (blocking) client-side API for bi-directional streaming RPCs
+      std::shared_ptr<grpc::ClientReaderWriter<ChatMessage, ChatMessage>> stream(stub_->Chat(&context));
 
-    //     request.set_name(name);
-    //     stream->Write(request);
-    //   });
+      while(true) {
+        // In separate thread, read messages from other users (that server sends)
+        std::thread read_thread([&]() {
+          ChatMessage server_message;
+          while(stream->Read(&server_message)){
+            std::cout << server_message.from() << ": " << server_message.message() << std::endl;
+          }
+        });
 
-    //   MessageResponse response;
-    //   while (stream->Read(&response)) {
-    //     std::cout << "Got message: '" << response.message() << "'" << std::endl;
-    //   }
+        // Client message container
+        ChatMessage client_message;
+        std::string message;
+        // std::cin >> message;
+        while (message.empty()) {
+          std::cout << "Enter a message: ";
+          std::getline(std::cin, message);
+        }
 
-    //   stream->WritesDone();
-    //   writer_thread.join();
+        client_message.set_from(name);
+        client_message.set_message(message);
+        // Send message to server
+        if(!stream->Write(client_message)) {
+          std::cout << "Failure occured writing to server.." << std::endl;
+          break;
+        }
 
-    //   Status status = stream->Finish();
-    //   if (status.ok()) {
-    //     std::cout << "Chat ended" << std::endl;
-    //   } else {
-    //     std::cout << "Chat failed: " << status.error_message() << std::endl;
-    //   }
-    // };
+        stream->WritesDone();
+        read_thread.join();
+
+        // Status status = stream->Finish();
+        // if (status.ok()) {
+        //   std::cout << "Chat ended" << std::endl;
+        // } else {
+        //   std::cout << "Chat failed: " << status.error_message() << std::endl;
+        // }
+      }
+    };
 
   private:
     std::unique_ptr<ChatService::Stub> stub_;
@@ -86,6 +103,13 @@ int main(int argc, char** argv) {
   std::cin >> name;
 
   client.JoinChat(name);
+
+  try {
+    client.Chat(name);
+  } catch (std::exception& e) {
+    // Catch any other exceptions of type std::exception
+    std::cerr << "Caught exception: " << e.what() << std::endl;
+  }
 
   return 0;
 }

@@ -16,21 +16,19 @@ message LoginResponse {
   string message = 1;
 }
 
-message MessageRequest {
-  string message = 1;
-}
 /* 
   When the C++ code is generated from this proto file, 
   it will include a MessageResponse class with a 
   message() method to get the value of the message field, 
   and a set_message() method to set its value.
 */
-message MessageResponse {
-  string message = 1;
+message ChatMessage {
+  string from = 1;
+  string message = 2;
 }
 
 service ChatService {
-  rpc Chat(stream MessageRequest) returns (stream MessageResponse) {}
+  rpc Chat(stream ChatMessage) returns (stream ChatMessage) {}
 
-  rpc JoinChat(LoginRequest) returns (MessageResponse) {}
+  rpc JoinChat(LoginRequest) returns (ChatMessage) {}
 }
