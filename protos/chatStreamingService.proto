@@ -1,20 +1,8 @@
 syntax = "proto3";
 
+import "google/protobuf/empty.proto";
+
 package chatStreamingService;
-
-/* 
-  The name field is a string type and its tag number is 1.
-  This means that it is the first field in the LoginRequest, and its
-  value will be serialized with a field number of 1 in the LoginRequest's
-  binary representation
-*/
-message LoginRequest {
-  string name = 1;
-}
-
-message LoginResponse {
-  string message = 1;
-}
 
 /* 
   When the C++ code is generated from this proto file, 
@@ -22,13 +10,13 @@ message LoginResponse {
   message() method to get the value of the message field, 
   and a set_message() method to set its value.
 */
-message ChatMessage {
-  string from = 1;
+message Message {
+  string username = 1;
   string message = 2;
 }
 
 service ChatService {
-  rpc Chat(stream ChatMessage) returns (stream ChatMessage) {}
+  rpc SendMessage(stream Message) returns (google.protobuf.Empty) {}
 
-  rpc JoinChat(LoginRequest) returns (ChatMessage) {}
+  rpc ReceiveMessage(google.protobuf.Empty) returns (stream Message) {}
 }

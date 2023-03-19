@@ -1,74 +1,164 @@
+#include "LinkedList.h"
 #include "cmake/build/chatStreamingService.grpc.pb.h"
+#include <google/protobuf/empty.pb.h>
 #include <grpcpp/grpcpp.h>
+
 #include <iostream>
 #include <memory>
+#include <queue>
 #include <string>
 
-
-using chatStreamingService::LoginRequest;
-using chatStreamingService::ChatMessage;
 using chatStreamingService::ChatService;
+using chatStreamingService::Message;
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
 
 class ChatServiceImpl final : public ChatService::Service {
-  public:
-    ChatServiceImpl() {
-      // Initialize the streams map
-      streams_ = std::map<std::string, std::unique_ptr<grpc::ServerReaderWriter<ChatMessage, ChatMessage>>>();
+public:
+  ChatServiceImpl()
+      : chat_messages(new LinkedList()), dummy(Node("Server", "Welcome to the Server")) {
+    // Initialize the queue of messages
+    // chat_messages = std::shared_ptr<LinkedList>(new LinkedList());
+
+    // Initialize Dummy Node to help track latest messages
+    // dummy = *(new Node("dummy", "dummy"));
+  }
+
+  Status SendMessage(ServerContext *context,
+                     grpc::ServerReader<Message> *stream,
+                     google::protobuf::Empty *response) override {
+    Message request;
+
+    while (stream->Read(&request)) {
+      std::cout << "\n\t\t----------Before----------" << std::endl;
+      traverseAndPrint(chat_messages);
+
+      std::string msg = request.username() + ": " + request.message();
+      // std::cout << msg << std::endl;
+
+      // Save message in datastructure
+      addToLL(request.username(), request.message());
+
+      std::cout << "\n\t\t----------After----------" << std::endl;
+      traverseAndPrint(chat_messages);
     }
 
-    Status JoinChat(ServerContext * context, const LoginRequest * request, ChatMessage * response) override {
-      std::string serverReceiveMessage = "Server Received message: " + request->name();
-      std::cout << serverReceiveMessage << std::endl;
+    return Status::OK;
+  }
 
-      std::string message = "Hello " + request->name() + "! This is Server! Welcome to the Chat!";
-      response->set_from(request->name());
-      response->set_message(message);
+  // Client subscribes to server to receive messages
+  Status ReceiveMessage(ServerContext *context,
+                        // without const, this RPC method doesnt get called and
+                        // we can't override this method definition
+                        const google::protobuf::Empty *request,
+                        grpc::ServerWriter<Message> *stream) override {
 
-      return Status::OK;
-    }
+    std::cout << "\nA Client has subscribed to the Server...\n" << std::endl;
 
-    Status Chat(ServerContext *context, grpc::ServerReaderWriter<ChatMessage, ChatMessage>* stream) override {
-      std::cout << "\nServer is executing RPC Chat()...\n" << std::endl;
-      ChatMessage request;
-      while (stream->Read(&request)) {
-        std::string clientName = request.from();
-        std::string message = request.message();
+    // Server First message - (username, message)
+    // addToLL("Server", "Welcome to the Server!");
 
-        // Add client to the streams_
-        streams_.emplace(clientName, stream);
+    while (true) {
+      g_mutex.lock();
+      // At init, there are no latest messages sent to the client
+      if (dummy.next == nullptr) {
+        std::cout << "\n[DEBUGGING] Init dummy.msg = " << dummy.message
+                  << std::endl;
+        std::cout << "\n[DEBUGGING] Init, dummy.next = nullptr " << std::endl;
 
-        std::string serverReceived = "Server received message from `" + clientName + "` with message: " + message;
-        std::cout << serverReceived << std::endl;
+        dummy.next = chat_messages->head;
+        latestMessage = &dummy;
 
-        // Notify all connected clients of the new message
-        ChatMessage response;
-        for(auto& pair : streams_) {
-          if (pair.first != clientName) {
-            ChatMessage response;
-            response.set_from(clientName);
-            response.set_message(message);
-            pair.second->Write(response);
-          }
-        }
-
-        // Write() returns true if it successfully writes, false otherwise
-        // Notify current client their message was recevied from the server
-        response.set_from("Server");
-        response.set_message("Received your message successfully.");
-        if (!stream->Write(response)) {
-          break;
-        }
-
+        // Set current node to the LL's head, a node ahead latestMessage
+        cur = &latestMessage->next;
       }
-      return Status::OK;
+
+      // DEBUGGING
+      // if (cur == nullptr) {
+      //   std::cout << "\n[DEBUGGING] cur->next = nullptr" << std::endl;
+      // } else {
+      //   std::cout << "\n[DEBUGGING] cur->next = " << cur->message << std::endl;
+      // }
+
+      // DEBUGGING
+      if (latestMessage != nullptr) {
+        std::cout << "\n[DEBUGGING] latestMessage = " << latestMessage->message
+                  << std::endl;
+      }
+
+      // DEBUGGING
+      if (latestMessage->next != nullptr) {
+        std::cout << "\n[DEBUGGING] latestMessage.next (cur) = " << latestMessage->next->message
+                  << std::endl;
+      }
+
+      // Write all messages in data structure to the client
+      while (latestMessage->next != nullptr) {
+
+        // DEBUGGING
+        std::cout << "\n[DEBUGGING] Response message being sent to Client... "
+                  << std::endl;
+
+        // Repsonse container
+        Message response;
+
+        // Update previous message written as the latest message client received
+        latestMessage = *cur;
+        std::cout << "\n[DEBUGGING] latestMessage = " << latestMessage->message
+                  << std::endl;
+
+        response.set_username(latestMessage->username);
+        response.set_message(latestMessage->message);
+        if (!stream->Write(response)) {
+          std::cout << "\n\t\t***Error Sending Message to Client***\n" << std::endl;
+          return Status::CANCELLED; 
+        }
+
+        // std::cout << "\n[DEBUGGING] cur = " << cur.message
+        //           << std::endl;
+
+        // Update cur pointer to next node in LL
+        cur = &(latestMessage->next);
+      }
+      g_mutex.unlock();
+      sleep(4);
     }
 
-  private:
-    std::map<std::string, std::unique_ptr<grpc::ServerReaderWriter<ChatMessage, ChatMessage>>> streams_;
+    return Status::OK;
+  }
+
+  // Function to add a new string to the queue.
+  void addToLL(const std::string &username, const std::string &msg) {
+    g_mutex.lock();
+    // traverseAndPrint(chat_messages);
+    chat_messages->add(username, msg);
+    // traverseAndPrint(chat_messages);
+    g_mutex.unlock();
+  }
+
+  // Traverse and build responses to send to client
+  void traverseAndPrint(std::shared_ptr<LinkedList> ll) {
+    g_mutex.lock();
+    Node *current = ll->head;
+    std::cout << "\n\t\tSERVER DEBUG LINKED LIST MESSAGES\n\t\t" << std::endl;
+    while (current != nullptr) {
+      std::cout << current->message << std::endl;
+      current = current->next;
+    }
+    g_mutex.unlock();
+    std::cout << "\n\t\t*********************************\n\t\t" << std::endl;
+  }
+
+private:
+  std::shared_ptr<LinkedList> chat_messages;
+  std::mutex g_mutex;
+
+  // Keep track of the latest chat message in LL
+  Node dummy;
+  Node *latestMessage;
+  Node **cur;
 };
 
 void RunServer() {
