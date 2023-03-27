@@ -15,8 +15,19 @@ message Message {
   string message = 2;
 }
 
+message Time {
+  int64 utc = 1;
+  bool isNew = 2;
+}
+
 service ChatService {
   rpc SendMessage(stream Message) returns (google.protobuf.Empty) {}
 
-  rpc ReceiveMessage(google.protobuf.Empty) returns (stream Message) {}
+  // Client checks if there is a message newer than the given UTC
+  // if there is then we update isNew to true
+  rpc IsNewMessageAvailable(Time) returns (Time) {}
+
+  // On Client side, this is called only when server confirms there are new messages
+  // The client receives the new messages from the server
+  rpc ReceiveMessage(Time) returns (stream Message) {}
 }
