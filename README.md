@@ -1,5 +1,9 @@
 # gRPC Chat Streaming Service
 
+### Install gRPC
+[Setup gRPC](https://grpc.io/docs/languages/cpp/quickstart/#setup)
+
+
 ### How to build this project?
 
 1. `export MY_INSTALL_DIR=<YOUR_gRPC_INSTALL_DIRECTORY> && mkdir -p cmake/build` (Locally installed gRPC can be found in `$HOME/.local`)
